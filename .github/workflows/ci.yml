@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+
+# Cancel in-progress runs for the same branch/PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint, types and package
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
+
+      - name: Install the package and its development tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . --group dev
+
+      - name: Ruff (lint)
+        run: 'ruff check .'
+
+      - name: Ruff (format)
+        run: 'ruff format --check .'
+
+      - name: Mypy (strict)
+        run: 'mypy'
+
+      - name: Build and check the distributions
+        run: |
+          python -m build
+          twine check --strict dist/*
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.11', '3.12', '3.13', '3.14', '3.15']
+        include:
+          - os: windows-latest
+            python-version: '3.14'
+          - os: macos-latest
+            python-version: '3.14'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
+
+      - name: Install the package and its development tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . --group dev
+
+      # Unit tests with a mocked transport: no network, no API key.
+      - name: Run tests
+        run: 'pytest'

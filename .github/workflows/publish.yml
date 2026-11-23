@@ -1,0 +1,91 @@
+# Publishes converter-studio to PyPI when a version tag is pushed.
+#
+# The tag ("X.Y.Z" or "vX.Y.Z") must equal __version__ in src/converter_studio/_version.py. The
+# build job checks that, runs the linters, the type check and the tests, builds the sdist and
+# the wheel and checks them with twine; the publish job uploads them.
+#
+# Authentication: PyPI Trusted Publishing (OIDC), no token or secret. On pypi.org, under
+# Account → Publishing (a "pending publisher" before the first release, the project's
+# Publishing page after it): owner tariksucu, repository converter-studio-python, workflow
+# publish.yml, environment pypi. The upload also carries PEP 740 attestations made by the
+# publishing action.
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Check that the tag is the package version
+        run: |
+          version="$(python -c 'exec(open("src/converter_studio/_version.py").read()); print(__version__)')"
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $version in _version.py"
+            exit 1
+          fi
+
+      - name: Install the package and its development tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . --group dev
+
+      - name: Lint, types and tests
+        run: |
+          ruff check .
+          ruff format --check .
+          mypy
+          pytest
+
+      - name: Build and check the distributions
+        run: |
+          rm -rf dist
+          python -m build
+          twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/converter-studio/
+
+    permissions:
+      # The OIDC token for Trusted Publishing and the attestations.
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@v1.14.3
