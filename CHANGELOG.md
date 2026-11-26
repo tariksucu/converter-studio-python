@@ -4,6 +4,13 @@ All notable changes to this package are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses
 [semantic versioning](https://semver.org/).
 
+## 1.0.1 - unreleased
+
+- README: a note in "Command line" on the two commands named `converter-studio`. This package's
+  uploads every file to converter.studio; the desktop app's converts on the computer and uses the
+  cloud only with `--cloud`. The one first on `PATH` runs; `python -m converter_studio` always
+  runs this package's. No change in behaviour.
+
 ## 1.0.0 - 2026-11-23
 
 The first release.
